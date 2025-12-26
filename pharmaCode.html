@@ -1,0 +1,641 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pharmalogix: Intelligent Resource Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-blue: #0f4c81; /* Deep Scientific Blue */
+            --accent-green: #38a169; /* Eco-Friendly Green */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .header-bg {
+            background-color: var(--primary-blue);
+        }
+        .step-button {
+            transition: all 0.2s;
+        }
+        .step-button:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+        .smart-suggestion-badge {
+            background-color: var(--accent-green);
+            color: white;
+        }
+        .tab-active {
+            border-bottom: 3px solid var(--primary-blue);
+            color: var(--primary-blue);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="header-bg text-white shadow-lg p-4 sticky top-0 z-10">
+        <h1 class="text-3xl font-extrabold tracking-tight">
+            Pharmalogix
+        </h1>
+        <p class="text-sm opacity-80 mt-1">Intelligent Research Resource Management</p>
+    </header>
+
+    <div class="flex flex-col lg:flex-row flex-grow">
+        <!-- Sidebar / Navigation Status -->
+        <aside class="bg-white p-4 shadow-md lg:w-1/4 w-full lg:sticky lg:top-[96px] overflow-auto">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Research Path</h2>
+            <div id="history-container" class="space-y-3 text-sm">
+                <!-- History will be populated here -->
+            </div>
+            <div id="back-button-container" class="mt-4 pt-4 border-t">
+                <button onclick="goBack()" class="w-full bg-gray-200 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-300 transition duration-150">
+                    ← Back
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-grow p-4 lg:p-8">
+            <div id="content-container" class="bg-white p-6 rounded-xl shadow-2xl min-h-[70vh]">
+                <!-- Step content will be injected here -->
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+    // --- Global State ---
+    const APP_STATE = {
+        history: [],
+        currentStep: 'step1',
+        selections: {
+            specialization: null,
+            area: null,
+            instrument: null,
+            hplc: {
+                apiName: 'Generic Drug API',
+                column: 'C18',
+                solventA: 'Water',
+                solventB: 'Acetonitrile',
+                ph: 7.0,
+                flowRate: 1.0,
+                detector: 'UV',
+            }
+        },
+        // Simulated Data for Smart Suggestions
+        MOCK_DATA: {
+            // API Polarity: 1 (Very Polar) to 5 (Very Non-polar)
+            APIs: {
+                'Amlodipine': { polarity: 4.5, lambdaMax: 237, suggestedColumn: 'C18 (Reversed Phase)', solubility: 'Low in Water' },
+                'Metformin': { polarity: 1.5, lambdaMax: 232, suggestedColumn: 'HILIC / C8', solubility: 'High in Water' },
+                'Generic Drug API': { polarity: 3.0, lambdaMax: 254, suggestedColumn: 'C18 / Phenyl', solubility: 'Moderate' },
+            },
+            GREEN_SOLVENTS: {
+                'Methanol': 'Ethanol (Less toxic, derived from biomass)',
+                'Acetonitrile': 'Ethyl Acetate (Eco-friendly, low boiling point)',
+                'Dichloromethane': 'Cyclopentyl Methyl Ether (CPME) (Safer alternative)'
+            }
+        }
+    };
+
+    // --- DOM Elements ---
+    const contentContainer = document.getElementById('content-container');
+    const historyContainer = document.getElementById('history-container');
+    const backButtonContainer = document.getElementById('back-button-container');
+
+    // --- Navigation Data ---
+    const STEPS = {
+        step1: {
+            title: 'Step 1: Choose Specialization (M.Pharm)',
+            options: [
+                { value: 'Pharmaceutics', label: 'Pharmaceutics' },
+                { value: 'Pharmaceutical Chemistry', label: 'Pharmaceutical Chemistry' },
+                { value: 'Pharmaceutical Quality Assurance', label: 'Pharmaceutical Quality Assurance' },
+                { value: 'Pharmacology', label: 'Pharmacology' },
+                { value: 'Phytopharmacy & Phytomedicine', label: 'Phytopharmacy & Phytomedicine' },
+            ],
+            nextStep: 'step2',
+            selectionKey: 'specialization',
+        },
+        step2: {
+            title: 'Step 2: Select Area within Pharmaceutical Quality Assurance (PQA)',
+            options: [
+                { value: 'Analytical Method Development & Validation', label: 'Analytical Method Development & Validation' },
+                { value: 'Stability Studies', label: 'Stability Studies' },
+                { value: 'Formulation Quality Control', label: 'Formulation Quality Control' },
+                { value: 'Impurity Profiling & Degradation Studies', label: 'Impurity Profiling & Degradation Studies' },
+                { value: 'Process Validation & GMP Studies', label: 'Process Validation & GMP Studies' },
+            ],
+            nextStep: 'step3',
+            selectionKey: 'area',
+        },
+        step3: {
+            title: 'Step 3: Select Instrument for Method Development',
+            options: [
+                { value: 'HPLC', label: '1. HPLC (High-Performance Liquid Chromatography)' },
+                { value: 'UV', label: '2. UV–Visible Spectrophotometry' },
+                { value: 'FTIR', label: '3. FTIR (Fourier Transform Infrared Spectroscopy)' },
+                { value: 'HPTLC', label: '4. HPTLC (High-Performance Thin Layer Chromatography)' },
+                { value: 'GC', label: '5. Gas Chromatography (GC)' },
+                { value: 'LC-MS', label: '6. LC–MS / LC–MS/MS' },
+                { value: 'GC-MS', label: '7. GC–MS' },
+            ],
+            nextStep: 'hplcModule', // Final step leads to the dedicated module
+            selectionKey: 'instrument',
+        }
+    };
+
+    // --- Core Functions ---
+
+    /**
+     * Renders the current navigation step or the main HPLC module.
+     * @param {string} stepKey - The key of the step to render.
+     */
+    function renderStep(stepKey) {
+        APP_STATE.currentStep = stepKey;
+        contentContainer.innerHTML = '';
+        updateHistory();
+
+        if (stepKey === 'hplcModule') {
+            renderHPLCModule();
+            backButtonContainer.classList.remove('hidden');
+            return;
+        }
+
+        const step = STEPS[stepKey];
+        if (!step) {
+            contentContainer.innerHTML = '<p class="text-red-500">Error: Step not found.</p>';
+            return;
+        }
+
+        const html = `
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">${step.title}</h2>
+            <p class="text-gray-600 mb-8">Please select the most relevant option to proceed.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                ${step.options.map(option => `
+                    <button
+                        class="step-button bg-blue-50 border-2 border-blue-200 text-gray-800 p-6 rounded-lg text-left font-medium hover:bg-blue-100 hover:border-blue-400 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                        onclick="handleSelection('${stepKey}', '${option.value}', '${option.label}')"
+                    >
+                        ${option.label}
+                    </button>
+                `).join('')}
+            </div>
+        `;
+        contentContainer.innerHTML = html;
+        backButtonContainer.classList.remove('hidden');
+    }
+
+    /**
+     * Handles an option selection, updates state, and moves to the next step.
+     */
+    function handleSelection(currentStepKey, value, label) {
+        const step = STEPS[currentStepKey];
+        if (!step) return;
+
+        // Store selection
+        APP_STATE.selections[step.selectionKey] = value;
+
+        // Update history (for breadcrumb/back navigation)
+        APP_STATE.history.push({ key: currentStepKey, label: label, selectionKey: step.selectionKey, next: step.nextStep });
+
+        // Move to next step
+        renderStep(step.nextStep);
+    }
+
+    /**
+     * Updates the Research Path sidebar/breadcrumb.
+     */
+    function updateHistory() {
+        historyContainer.innerHTML = '';
+        APP_STATE.history.forEach((item, index) => {
+            const isCurrent = index === APP_STATE.history.length - 1 && APP_STATE.currentStep !== 'hplcModule';
+            const icon = isCurrent ? '→' : '✓';
+            const color = isCurrent ? 'text-blue-600' : 'text-gray-500';
+
+            const itemHtml = `
+                <div class="flex items-start">
+                    <span class="mr-2 ${color}">${icon}</span>
+                    <div>
+                        <p class="font-semibold text-gray-700">${item.label}</p>
+                        <p class="text-xs text-gray-400">${item.selectionKey.charAt(0).toUpperCase() + item.selectionKey.slice(1)} Selected</p>
+                    </div>
+                </div>
+            `;
+            historyContainer.innerHTML += itemHtml;
+        });
+
+        if (APP_STATE.currentStep === 'hplcModule') {
+            historyContainer.innerHTML += `
+                <div class="flex items-start font-bold text-blue-700">
+                    <span class="mr-2">★</span>
+                    <div>
+                        <p>HPLC Method Module</p>
+                        <p class="text-xs font-normal text-gray-400">Main Configuration</p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Hide back button if at the very first step
+        if (APP_STATE.history.length === 0) {
+            backButtonContainer.classList.add('hidden');
+        } else {
+            backButtonContainer.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Handles the 'Back' button action.
+     */
+    function goBack() {
+        if (APP_STATE.history.length > 0) {
+            APP_STATE.history.pop();
+            if (APP_STATE.history.length > 0) {
+                const lastStep = APP_STATE.history[APP_STATE.history.length - 1];
+                // Go back to the previous step's key
+                renderStep(lastStep.key);
+            } else {
+                // If history is empty, go back to step 1
+                renderStep('step1');
+            }
+        }
+    }
+
+    // --- HPLC Module Implementation ---
+
+    /**
+     * Renders the main HPLC module interface with tabs.
+     */
+    function renderHPLCModule() {
+        const hplcData = APP_STATE.selections.hplc;
+        
+        contentContainer.innerHTML = `
+            <div class="flex justify-between items-center mb-6 border-b pb-2">
+                <h2 class="text-3xl font-bold text-primary-blue">HPLC Method Development Module</h2>
+                <input type="text" id="api-name-input" onchange="updateApiName(this.value)" value="${hplcData.apiName}" placeholder="Enter Drug/API Name" class="p-2 border rounded-lg text-lg focus:ring-primary-blue focus:border-primary-blue">
+            </div>
+
+            <div class="flex flex-wrap border-b mb-6" id="hplc-tabs">
+                <button class="p-3 mr-4 tab-active" data-tab="stationary" onclick="switchTab(this, 'stationary')">1. Stationary Phase</button>
+                <button class="p-3 mr-4" data-tab="mobile" onclick="switchTab(this, 'mobile')">2. Mobile Phase</button>
+                <button class="p-3 mr-4" data-tab="detector" onclick="switchTab(this, 'detector')">3. Detector Settings</button>
+                <button class="p-3 mr-4" data-tab="validation" onclick="switchTab(this, 'validation')">4. Method Validation</button>
+                <button class="p-3 mr-4" data-tab="comparative" onclick="switchTab(this, 'comparative')">5. Comparative Analysis</button>
+            </div>
+
+            <div id="hplc-content-area">
+                <!-- Tab content will be injected here -->
+            </div>
+        `;
+        // Load the initial tab
+        switchTab(document.querySelector('[data-tab="stationary"]'), 'stationary');
+    }
+    
+    function updateApiName(newName) {
+        APP_STATE.selections.hplc.apiName = newName.trim() || 'Generic Drug API';
+        // Re-render the current tab to apply new smart suggestions
+        const currentTabKey = document.querySelector('.tab-active').getAttribute('data-tab');
+        switchTab(document.querySelector('.tab-active'), currentTabKey);
+    }
+
+    function switchTab(button, tabKey) {
+        // Update active tab styling
+        document.querySelectorAll('#hplc-tabs button').forEach(btn => btn.classList.remove('tab-active'));
+        button.classList.add('tab-active');
+
+        const contentArea = document.getElementById('hplc-content-area');
+        contentArea.innerHTML = '';
+        
+        switch (tabKey) {
+            case 'stationary':
+                contentArea.innerHTML = renderStationaryPhaseTab();
+                break;
+            case 'mobile':
+                contentArea.innerHTML = renderMobilePhaseTab();
+                break;
+            case 'detector':
+                contentArea.innerHTML = renderDetectorSettingsTab();
+                break;
+            case 'validation':
+                contentArea.innerHTML = renderValidationTab();
+                break;
+            case 'comparative':
+                contentArea.innerHTML = renderComparativeAnalysisTab();
+                break;
+        }
+    }
+
+    /**
+     * Renders the Stationary Phase tab content.
+     */
+    function renderStationaryPhaseTab() {
+        const apiName = APP_STATE.selections.hplc.apiName;
+        const apiData = APP_STATE.MOCK_DATA.APIs[apiName] || APP_STATE.MOCK_DATA.APIs['Generic Drug API'];
+        
+        const suggestions = simulateSmartSuggestion('column', apiData);
+
+        return `
+            <h3 class="text-xl font-semibold mb-4 text-primary-blue">1. Stationary Phase (Column Selection)</h3>
+            <p class="text-gray-600 mb-6">Select the HPLC column type and properties. The system provides intelligent suggestions based on the API's simulated polarity.</p>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Smart Suggestion Panel -->
+                <div class="p-5 rounded-xl shadow-lg border-l-4 border-accent-green bg-green-50">
+                    <div class="flex items-center mb-3">
+                        <span class="smart-suggestion-badge px-3 py-1 text-xs font-bold rounded-full mr-2">SMART SUGGESTION</span>
+                    </div>
+                    <p class="font-medium text-gray-700">API Polarity (Simulated): <span class="text-lg text-accent-green">${apiData.polarity} / 5</span></p>
+                    <p class="mt-2 text-sm text-gray-600">Based on the calculated polarity for <strong class="text-primary-blue">${apiName}</strong>, the most suitable approach is:</p>
+                    <p class="mt-2 font-bold text-lg text-accent-green">${suggestions.columnType}</p>
+                    <p class="text-sm text-gray-500">Reason: ${suggestions.reason}</p>
+                </div>
+
+                <!-- Input/Selection Fields -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Column Type</label>
+                        <select class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                            <option>C18 (Octadecylsilane)</option>
+                            <option>C8 (Octylsilane)</option>
+                            <option>Silica (Normal Phase)</option>
+                            <option>Phenyl</option>
+                            <option>HILIC</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Column Dimensions (e.g., 150x4.6 mm; 5 µm)</label>
+                        <input type="text" value="150 x 4.6 mm, 5 µm" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Manufacturer</label>
+                        <input type="text" value="Agilent Zorbax" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Renders the Mobile Phase tab content.
+     */
+    function renderMobilePhaseTab() {
+        const apiData = APP_STATE.MOCK_DATA.APIs[APP_STATE.selections.hplc.apiName] || APP_STATE.MOCK_DATA.APIs['Generic Drug API'];
+        const greenSuggestion = simulateSmartSuggestion('greenSolvent', 'Acetonitrile');
+
+        return `
+            <h3 class="text-xl font-semibold mb-4 text-primary-blue">2. Mobile Phase (Solvent Selection & Composition)</h3>
+            <p class="text-gray-600 mb-6">Configure the mobile phase. The system auto-suggests ratios and provides eco-friendly alternatives for common solvents.</p>
+
+            <div class="grid md:grid-cols-3 gap-6">
+                <!-- Inputs -->
+                <div class="md:col-span-2 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Solvent A (Aqueous)</label>
+                        <input type="text" value="Water / 0.1% Formic Acid" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Solvent B (Organic)</label>
+                        <select class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                            <option>Acetonitrile (ACN)</option>
+                            <option>Methanol (MeOH)</option>
+                            <option>Ethanol</option>
+                            <option>Tetrahydrofuran (THF)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Buffer pH (<span class="text-accent-green">Optimized for stability: 7.0</span>)</label>
+                        <input type="number" value="7.0" min="2" max="8" step="0.1" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Flow Rate (mL/min)</label>
+                        <input type="number" value="1.0" min="0.1" max="2.0" step="0.1" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Smart Suggestion Panel - Green Chemistry -->
+                <div class="p-5 rounded-xl shadow-lg border-l-4 border-accent-green bg-green-50">
+                    <div class="flex items-center mb-3">
+                        <span class="smart-suggestion-badge px-3 py-1 text-xs font-bold rounded-full mr-2">GREEN ALTERNATIVE</span>
+                    </div>
+                    <p class="font-medium text-gray-700">Current Solvent: Acetonitrile</p>
+                    <p class="mt-2 text-sm text-gray-600">Suggested Eco-Friendly Replacement:</p>
+                    <p class="mt-2 font-bold text-lg text-accent-green">${greenSuggestion.replacement}</p>
+                    <p class="text-sm text-gray-500">Use of <strong class="text-primary-blue">Ethyl Acetate</strong> is preferred for its lower toxicity and environmental impact. Adjust mobile phase ratio accordingly.</p>
+                    
+                    <div class="mt-4 border-t pt-3">
+                        <p class="font-medium text-gray-700">Auto-Suggested Ratio:</p>
+                        <p class="text-2xl font-extrabold text-primary-blue mt-1">${apiData.polarity > 3 ? '50:50' : '80:20'} (A:B)</p>
+                        <p class="text-xs text-gray-500">Based on solubility data.</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Renders the Detector Settings tab content.
+     */
+    function renderDetectorSettingsTab() {
+        const apiData = APP_STATE.MOCK_DATA.APIs[APP_STATE.selections.hplc.apiName] || APP_STATE.MOCK_DATA.APIs['Generic Drug API'];
+        const suggestions = simulateSmartSuggestion('detector', apiData);
+
+        return `
+            <h3 class="text-xl font-semibold mb-4 text-primary-blue">3. Detector Settings</h3>
+            <p class="text-gray-600 mb-6">Select the detector type and wavelength. The system predicts the optimal detection wavelength ($\lambda_{\text{max}}$) based on the API's structure.</p>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Smart Suggestion Panel -->
+                <div class="p-5 rounded-xl shadow-lg border-l-4 border-accent-green bg-green-50">
+                    <div class="flex items-center mb-3">
+                        <span class="smart-suggestion-badge px-3 py-1 text-xs font-bold rounded-full mr-2">PREDICTED $\lambda_{\\text{max}}$</span>
+                    </div>
+                    <p class="font-medium text-gray-700">API Structure (Simulated): <span class="text-sm text-gray-500">${APP_STATE.selections.hplc.apiName}</span></p>
+                    <p class="mt-2 text-sm text-gray-600">The predicted maximum absorption wavelength, based on chromophore analysis, is:</p>
+                    <p class="mt-2 font-bold text-4xl text-accent-green">${suggestions.lambdaMax} nm</p>
+                    <p class="text-sm text-gray-500">Recommended Detector Type: <strong class="text-primary-blue">${suggestions.detector}</strong></p>
+                </div>
+
+                <!-- Input/Selection Fields -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Detector Type</label>
+                        <select class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-blue focus:border-primary-blue">
+                            <option>UV-Visible (Fixed Wavelength)</option>
+                            <option>PDA (Photo Diode Array)</option>
+                            <option>Fluorescence</option>
+                            <option>Refractive Index (RI)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Detection Wavelength ($\lambda_{\\text{max}}$ in nm)</label>
+                        <input type="number" value="${suggestions.lambdaMax}" min="190" max="800" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Injection Volume ($\mu$L)</label>
+                        <input type="number" value="20" min="5" max="100" class="w-full p-2 border border-gray-300 rounded-lg">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Renders the Method Validation tab content.
+     */
+    function renderValidationTab() {
+        return `
+            <h3 class="text-xl font-semibold mb-4 text-primary-blue">4. Method Validation (ICH Guidelines)</h3>
+            <p class="text-gray-600 mb-6">Track and document validation parameters according to ICH Q2(R1) guidelines. Automated reports are generated based on input data.</p>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Key Parameters Status -->
+                <div class="space-y-4 p-5 rounded-xl shadow-lg bg-gray-50">
+                    <h4 class="font-bold text-lg text-gray-800">Key Validation Status</h4>
+                    ${renderValidationParam('Linearity', 0.997, 'R² $\\ge 0.99$', 'text-accent-green')}
+                    ${renderValidationParam('Accuracy', '99.8%', '98.0\\% - 102.0\\%', 'text-accent-green')}
+                    ${renderValidationParam('Precision (Intraday)', '1.5% RSD', '$\\le 2.0\\%$ RSD', 'text-accent-green')}
+                    ${renderValidationParam('LOD/LOQ', 'Auto-Calculated', 'Pass/Fail', 'text-blue-500')}
+                    ${renderValidationParam('Robustness', 'In Progress', 'Method Withstands Variations', 'text-yellow-600')}
+                </div>
+
+                <!-- Report Generation -->
+                <div class="p-5 rounded-xl shadow-lg border-2 border-primary-blue bg-blue-50">
+                    <h4 class="font-bold text-lg text-primary-blue mb-4">Automated Documentation</h4>
+                    <p class="text-sm text-gray-700 mb-4">Generate comprehensive reports covering all ICH validation parameters, system suitability tests, and stability data.</p>
+                    <button class="w-full bg-primary-blue text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition duration-150 shadow-md">
+                        Generate Validation Report (PDF)
+                    </button>
+                    <p class="text-xs mt-3 text-gray-500">Report includes calculation of LOD, LOQ, and statistical analysis.</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    function renderValidationParam(name, value, criteria, colorClass) {
+        return `
+            <div class="flex justify-between items-center border-b pb-2">
+                <span class="font-medium text-gray-600">${name}</span>
+                <div>
+                    <span class="${colorClass} font-bold mr-2">${value}</span>
+                    <span class="text-xs text-gray-400">(${criteria})</span>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Renders the Comparative Analysis tab content.
+     */
+    function renderComparativeAnalysisTab() {
+        return `
+            <h3 class="text-xl font-semibold mb-4 text-primary-blue">5. Comparative Analysis & Optimization</h3>
+            <p class="text-gray-600 mb-6">Compare the developed method against existing references or internal standards to identify areas for improvement in speed and sustainability.</p>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- Comparison Table (Simulated) -->
+                <div class="overflow-x-auto rounded-lg shadow-lg">
+                    <table class="min-w-full divide-y divide-gray-200 bg-white">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parameter</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Your Method</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference Method</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            <tr><td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Run Time</td><td class="px-4 py-4 whitespace-nowrap text-sm text-accent-green font-bold">12.5 min</td><td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">25.0 min</td></tr>
+                            <tr><td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Solvent Usage</td><td class="px-4 py-4 whitespace-nowrap text-sm text-accent-green font-bold">12.5 mL/sample</td><td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">25.0 mL/sample</td></tr>
+                            <tr><td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Resolution (min)</td><td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900">2.1</td><td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">1.7</td></tr>
+                            <tr><td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">Total Cost/Run</td><td class="px-4 py-4 whitespace-nowrap text-sm text-accent-green font-bold">$1.50</td><td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500">$3.00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Improvement Suggestions -->
+                <div class="p-5 rounded-xl shadow-lg border-l-4 border-yellow-500 bg-yellow-50">
+                    <h4 class="font-bold text-lg text-yellow-700 mb-3">Improvement Suggestions</h4>
+                    <ul class="list-disc list-inside space-y-2 text-sm text-gray-700">
+                        <li><strong class="text-primary-blue">Efficiency:</strong> The run time is excellent (50% reduction). Consider a 3 $\mu$m particle size column for a further 10-15% reduction in run time.</li>
+                        <li><strong class="text-primary-blue">Sustainability:</strong> Implement the suggested Green Solvent (Ethyl Acetate) to improve the method's E-factor (environmental factor).</li>
+                        <li><strong class="text-primary-blue">Validation:</strong> Ensure the long-term system suitability tests (e.g., tailing factor) are documented before final deployment.</li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Simulates the intelligent suggestion logic based on the user's API.
+     * @param {string} type - The type of suggestion to generate.
+     * @param {*} data - Contextual data (e.g., API data or solvent name).
+     * @returns {object} The suggestion result.
+     */
+    function simulateSmartSuggestion(type, data) {
+        switch (type) {
+            case 'column':
+                // Data is API Data object
+                if (data.polarity <= 2.5) {
+                    return {
+                        columnType: 'HILIC or C8 Column',
+                        reason: `API is highly polar (Polarity ${data.polarity}). HILIC or a mid-chain C8 column in reversed phase mode is recommended for better retention.`
+                    };
+                } else if (data.polarity > 4.0) {
+                    return {
+                        columnType: 'C18 Column (Reversed Phase)',
+                        reason: `API is non-polar (Polarity ${data.polarity}). The standard C18 column offers robust separation and excellent resolution.`
+                    };
+                } else {
+                    return {
+                        columnType: 'C18 or Phenyl-Hexyl Column',
+                        reason: `API is moderately polar. C18 is the default, but Phenyl-Hexyl offers shape selectivity useful for aromatic compounds.`
+                    };
+                }
+            case 'greenSolvent':
+                // Data is the current solvent string (e.g., 'Acetonitrile')
+                const replacement = APP_STATE.MOCK_DATA.GREEN_SOLVENTS[data] || 'No immediate replacement available.';
+                return { replacement: replacement.split(' (')[0] };
+            
+            case 'detector':
+                 // Data is API Data object
+                const lambda = data.lambdaMax;
+                let detectorType = 'UV-Visible';
+                if (lambda > 250) {
+                    detectorType = 'PDA (Photo Diode Array)';
+                }
+                return {
+                    lambdaMax: lambda,
+                    detector: detectorType
+                };
+
+            default:
+                return { columnType: 'N/A', reason: 'Unknown suggestion type.' };
+        }
+    }
+
+
+    // --- Initialization ---
+
+    /**
+     * Starts the application by rendering the first step.
+     */
+    function initApp() {
+        // Force the app to start on step 1
+        renderStep('step1');
+    }
+
+    // Start the application
+    window.onload = initApp;
+
+</script>
+
+</body>
+</html>
